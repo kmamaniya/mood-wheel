@@ -1,0 +1,15 @@
+{
+  "name": "mood-wheel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A private GitHub-authenticated feelings wheel backed by Notion.",
+  "type": "module",
+  "scripts": {
+    "dev": "npx wrangler pages dev .",
+    "test": "node --test",
+    "check": "node --check src/app.js && node --check functions/api/entries.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
