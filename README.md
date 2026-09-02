@@ -4,11 +4,11 @@ A private, accessible feelings-wheel check-in that uses GitHub only to verify th
 
 ## Architecture
 
-The source lives in your GitHub repository and should be deployed as a Cloudflare Pages project connected to that repository. Cloudflare Pages Functions provide the same-origin server boundary for GitHub OAuth and the Notion API token.
+The source lives in your GitHub repository and is deployed through a Cloudflare Worker connected to that repository. The Worker serves the static interface and provides the same-origin server boundary for GitHub OAuth and the Notion API token.
 
 This is deliberate: GitHub Pages can host a static UI, but it cannot safely hold the GitHub client secret, a signed session secret, or the Notion integration token.
 
-Browser → GitHub OAuth → Pages Function → private Notion Daily Mood Log
+Browser → GitHub OAuth → Cloudflare Worker → private Notion Daily Mood Log
 
 The function reads its encrypted environment secrets only on the server.
 
@@ -31,14 +31,14 @@ The Notion page already contains the circular Emotion Wheel — Circular and Int
 
 ## Configure deployment
 
-1. Put this project in the GitHub repository you want Cloudflare Pages to deploy.
+1. Connect this GitHub repository to a Cloudflare Worker named `mood-wheel`. Its deploy command is `npx wrangler deploy`.
 2. In GitHub, register an OAuth app. Set its callback URL to:
 
-       https://YOUR-PAGES-PROJECT.pages.dev/api/auth/callback
+       https://YOUR-WORKER.workers.dev/api/auth/callback
 
    The app requests only the read:user scope.
 3. Create a Notion internal integration, give it read and write content capabilities, then share the Daily Mood Log database with that integration.
-4. In Cloudflare Pages, connect the GitHub repository and add these encrypted production and preview secrets:
+4. In the Cloudflare Worker’s Settings → Variables and Secrets, add these encrypted production secrets:
 
    | Name | Value |
    | --- | --- |
@@ -50,7 +50,7 @@ The Notion page already contains the circular Emotion Wheel — Circular and Int
    | NOTION_DASHBOARD_URL | The private Mood Tracker Notion page URL |
    | SESSION_SECRET | A high-entropy random secret |
 
-5. Set the Pages build command to none and the build output directory to .. Cloudflare detects the functions directory automatically.
+5. Keep the linked Worker deploy command as `npx wrangler deploy`. The included `wrangler.toml` declares both the Worker entry point and the static assets directory.
 
 The single-login allowlist is intentional: the current Notion database has no per-user ownership field, so allowing several GitHub accounts would make a shared journal.
 
@@ -58,7 +58,7 @@ The single-login allowlist is intentional: the current Notion database has no pe
 
 Copy .dev.vars.example to .dev.vars, fill in your own values, then run:
 
-    npx wrangler pages dev .
+    npx wrangler dev
 
 ## Tests
 
