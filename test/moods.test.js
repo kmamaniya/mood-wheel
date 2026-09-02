@@ -35,6 +35,13 @@ test('specific emotions are scoped to the core-emotion branch', () => {
     resolveMoodSelection({ coreEmotion: 'safe', specificEmotions: ['furious'] }),
     null,
   );
+  assert.deepEqual(
+    resolveMoodSelection({
+      coreEmotions: ['safe', 'joyful'],
+      specificEmotions: ['calm', 'curious'],
+    })?.coreEmotions.map((emotion) => emotion.name),
+    ['Safe', 'Joyful'],
+  );
 });
 
 test('Hurt uses existing Notion options without changing the database schema', () => {
@@ -44,9 +51,9 @@ test('Hurt uses existing Notion options without changing the database schema', (
   );
 });
 
-test('a valid multi-select entry is normalized without changing the input', () => {
+test('a valid multi-core, multi-select entry is normalized without changing the input', () => {
   const entry = {
-    coreEmotion: ' joyful ',
+    coreEmotions: [' joyful ', 'safe'],
     specificEmotions: ['curious', 'alive', 'curious'],
     intensity: '7',
     date: '2026-09-01',
@@ -61,6 +68,7 @@ test('a valid multi-select entry is normalized without changing the input', () =
     errors: {},
     value: {
       coreEmotion: 'Joyful',
+      coreEmotions: ['Joyful', 'Safe'],
       specificEmotions: ['curious', 'alive'],
       intensity: 7,
       date: '2026-09-01',
@@ -82,7 +90,7 @@ test('validation rejects out-of-branch emotions, invalid intensity, and invalid 
   });
 
   assert.equal(result.valid, false);
-  assert.equal(result.errors.specificEmotions, 'Choose specific emotions from the selected branch.');
+  assert.equal(result.errors.specificEmotions, 'Choose specific emotions from one of the selected branches.');
   assert.equal(result.errors.intensity, 'Choose an intensity from 1 to 10.');
   assert.equal(result.errors.date, 'Choose a valid date.');
 });

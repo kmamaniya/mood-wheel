@@ -6,6 +6,7 @@ const assets = [
   ['index.html', 'public/index.html'],
   ['styles.css', 'public/styles.css'],
   ['src/app.js', 'public/src/app.js'],
+  ['src/date.js', 'public/src/date.js'],
   ['src/moods.js', 'public/src/moods.js'],
 ];
 

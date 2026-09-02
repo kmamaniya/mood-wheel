@@ -66,8 +66,8 @@
               <svg
                 class="mood-wheel"
                 viewBox="0 0 500 500"
-                role="radiogroup"
-                aria-label="Choose a core emotion"
+                role="group"
+                aria-label="Choose core feelings"
                 aria-describedby="wheel-instruction"
               >
                 <circle class="wheel-halo" cx="250" cy="250" r="232"></circle>
@@ -75,20 +75,20 @@
                 <circle class="wheel-core" id="wheel-core" cx="250" cy="250" r="74"></circle>
                 <g class="wheel-copy" aria-hidden="true">
                   <text class="wheel-copy-kicker" id="wheel-copy-kicker" x="250" y="234">CORE FEELING</text>
-                  <text class="wheel-copy-title" id="wheel-copy-title" x="250" y="265">Choose one</text>
+                  <text class="wheel-copy-title" id="wheel-copy-title" x="250" y="265">Choose any</text>
                   <text class="wheel-copy-hint" id="wheel-copy-hint" x="250" y="288">from the wheel</text>
                 </g>
               </svg>
             </div>
 
             <p class="wheel-instruction" id="wheel-instruction">
-              Choose the broad feeling first. Use arrow keys to move around the wheel.
+              Choose every broad feeling that fits. Use arrow keys to move around the wheel, then Space or Enter to select.
             </p>
 
             <div class="specific-section" id="specific-section" hidden>
               <div class="field-label-row">
-                <label id="specific-heading">Choose all that fit</label>
-                <span>Multiple choices welcome</span>
+                <label id="specific-heading">Choose the shades that fit</label>
+                <span>Across every selected feeling</span>
               </div>
               <div
                 class="specific-emotions"
