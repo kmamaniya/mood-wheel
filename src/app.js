@@ -3,6 +3,7 @@ import {
   getCoreEmotion,
   getSpecificEmotions,
 } from './moods.js';
+import { formatMoodDate } from './date.js';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const WHEEL_CENTER = 250;
@@ -44,9 +45,9 @@ const elements = {
 };
 
 const state = {
-  coreEmotionId: null,
+  coreEmotionIds: new Set(),
   entries: [],
-  specificEmotions: new Set(),
+  specificEmotionsByCore: new Map(),
   user: null,
 };
 
@@ -90,8 +91,14 @@ function colorWithAlpha(hex, alpha) {
   return 'rgba(' + red + ', ' + green + ', ' + blue + ', ' + alpha + ')';
 }
 
-function selectedCoreEmotion() {
-  return getCoreEmotion(state.coreEmotionId);
+function selectedCoreEmotions() {
+  return CORE_EMOTIONS.filter((emotion) => state.coreEmotionIds.has(emotion.id));
+}
+
+function selectedSpecificEmotions() {
+  return [...new Set(
+    [...state.specificEmotionsByCore.values()].flatMap((emotions) => [...emotions]),
+  )];
 }
 
 function formatDateForInput(date) {
@@ -99,14 +106,6 @@ function formatDateForInput(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return year + '-' + month + '-' + day;
-}
-
-function formatDate(dateValue) {
-  if (!dateValue) {
-    return '';
-  }
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    .format(new Date(dateValue + 'T12:00:00'));
 }
 
 function setMessage(message, stateName) {
@@ -122,27 +121,33 @@ function clearMessage() {
   setMessage('', '');
 }
 
-function setWheelCopy(coreEmotion) {
-  if (!coreEmotion) {
+function setWheelCopy() {
+  const coreEmotions = selectedCoreEmotions();
+  const primaryCoreEmotion = coreEmotions[0];
+  const specificEmotionCount = selectedSpecificEmotions().length;
+
+  if (!primaryCoreEmotion) {
     elements.wheelCore.style.fill = '#fffefa';
     elements.wheelCore.style.stroke = 'rgba(58, 49, 38, 0.12)';
     elements.wheelCopyKicker.textContent = 'CORE FEELING';
-    elements.wheelCopyTitle.textContent = 'Choose one';
+    elements.wheelCopyTitle.textContent = 'Choose any';
     elements.wheelCopyHint.textContent = 'from the wheel';
     return;
   }
 
-  elements.wheelCore.style.fill = colorWithAlpha(coreEmotion.color, 0.22);
-  elements.wheelCore.style.stroke = colorWithAlpha(coreEmotion.color, 0.65);
+  elements.wheelCore.style.fill = colorWithAlpha(primaryCoreEmotion.color, 0.22);
+  elements.wheelCore.style.stroke = colorWithAlpha(primaryCoreEmotion.color, 0.65);
   elements.wheelCopyKicker.textContent = 'CORE FEELING';
-  elements.wheelCopyTitle.textContent = coreEmotion.name;
-  elements.wheelCopyHint.textContent = state.specificEmotions.size
-    ? state.specificEmotions.size + ' shades chosen'
+  elements.wheelCopyTitle.textContent = coreEmotions.length === 1
+    ? primaryCoreEmotion.name
+    : coreEmotions.length + ' feelings';
+  elements.wheelCopyHint.textContent = specificEmotionCount
+    ? specificEmotionCount + ' shades chosen'
     : 'choose all that fit';
 }
 
-function renderWheel() {
-  const selectedId = state.coreEmotionId;
+function renderWheel(focusId = '') {
+  const selectedIds = state.coreEmotionIds;
   const segmentSize = 360 / CORE_EMOTIONS.length;
   const fragment = document.createDocumentFragment();
 
@@ -150,15 +155,15 @@ function renderWheel() {
     const startAngle = index * segmentSize;
     const endAngle = startAngle + segmentSize;
     const labelPoint = pointOnCircle(177, startAngle + segmentSize / 2);
-    const selected = emotion.id === selectedId;
+    const selected = selectedIds.has(emotion.id);
     const group = createSvgElement('g', {
       'aria-checked': selected ? 'true' : 'false',
       'aria-label': emotion.name + '. ' + emotion.description,
       class: 'wheel-segment',
       'data-core-emotion': emotion.id,
       'data-selected': selected ? 'true' : 'false',
-      role: 'radio',
-      tabindex: selected || (!selectedId && index === 0) ? '0' : '-1',
+      role: 'checkbox',
+      tabindex: emotion.id === focusId || (!focusId && index === 0) ? '0' : '-1',
     });
     const title = createSvgElement('title');
     title.textContent = emotion.name + ': ' + emotion.description;
@@ -176,13 +181,13 @@ function renderWheel() {
     label.textContent = emotion.name;
 
     group.append(title, path, label);
-    group.addEventListener('click', () => selectCoreEmotion(emotion.id));
+    group.addEventListener('click', () => toggleCoreEmotion(emotion.id, true));
     group.addEventListener('keydown', (event) => handleWheelKeydown(event, index));
     fragment.append(group);
   });
 
   elements.wheelSegments.replaceChildren(fragment);
-  setWheelCopy(selectedCoreEmotion());
+  setWheelCopy();
 }
 
 function handleWheelKeydown(event, index) {
@@ -197,25 +202,30 @@ function handleWheelKeydown(event, index) {
     targetIndex = CORE_EMOTIONS.length - 1;
   } else if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
-    selectCoreEmotion(CORE_EMOTIONS[index].id, true);
+    toggleCoreEmotion(CORE_EMOTIONS[index].id, true);
     return;
   } else {
     return;
   }
 
   event.preventDefault();
-  selectCoreEmotion(CORE_EMOTIONS[targetIndex].id, true);
+  document.querySelector('[data-core-emotion="' + CORE_EMOTIONS[targetIndex].id + '"]')?.focus();
 }
 
-function selectCoreEmotion(id, moveFocus) {
+function toggleCoreEmotion(id, moveFocus) {
   if (!getCoreEmotion(id)) {
     return;
   }
 
-  state.coreEmotionId = id;
-  state.specificEmotions = new Set();
+  if (state.coreEmotionIds.has(id)) {
+    state.coreEmotionIds.delete(id);
+    state.specificEmotionsByCore.delete(id);
+  } else {
+    state.coreEmotionIds.add(id);
+    state.specificEmotionsByCore.set(id, new Set());
+  }
   clearMessage();
-  renderWheel();
+  renderWheel(id);
   renderSpecificEmotions();
   renderSelectedMood();
 
@@ -225,58 +235,83 @@ function selectCoreEmotion(id, moveFocus) {
 }
 
 function renderSpecificEmotions() {
-  const coreEmotion = selectedCoreEmotion();
-  elements.specificSection.hidden = !coreEmotion;
+  const coreEmotions = selectedCoreEmotions();
+  elements.specificSection.hidden = coreEmotions.length === 0;
   elements.specificEmotions.replaceChildren();
-  if (!coreEmotion) {
+  if (coreEmotions.length === 0) {
     return;
   }
 
   const fragment = document.createDocumentFragment();
-  getSpecificEmotions(coreEmotion.id).forEach((specificEmotion) => {
-    const selected = state.specificEmotions.has(specificEmotion);
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'specific-chip';
-    button.dataset.selected = selected ? 'true' : 'false';
-    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-    button.style.setProperty('--mood-color', coreEmotion.color);
-    button.textContent = specificEmotion;
-    button.addEventListener('click', () => toggleSpecificEmotion(specificEmotion));
-    fragment.append(button);
+  coreEmotions.forEach((coreEmotion) => {
+    const group = document.createElement('div');
+    group.className = 'specific-emotion-group';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', coreEmotion.name + ' specific feelings');
+
+    const label = document.createElement('p');
+    label.className = 'specific-emotion-group-label';
+    label.style.setProperty('--mood-color', coreEmotion.color);
+    label.textContent = coreEmotion.name;
+
+    const chips = document.createElement('div');
+    chips.className = 'specific-emotion-chips';
+    const selectedEmotions = state.specificEmotionsByCore.get(coreEmotion.id) || new Set();
+    getSpecificEmotions(coreEmotion.id).forEach((specificEmotion) => {
+      const selected = selectedEmotions.has(specificEmotion);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'specific-chip';
+      button.dataset.selected = selected ? 'true' : 'false';
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.style.setProperty('--mood-color', coreEmotion.color);
+      button.textContent = specificEmotion;
+      button.addEventListener('click', () => toggleSpecificEmotion(coreEmotion.id, specificEmotion));
+      chips.append(button);
+    });
+    group.append(label, chips);
+    fragment.append(group);
   });
   elements.specificEmotions.append(fragment);
 }
 
-function toggleSpecificEmotion(specificEmotion) {
-  if (state.specificEmotions.has(specificEmotion)) {
-    state.specificEmotions.delete(specificEmotion);
+function toggleSpecificEmotion(coreEmotionId, specificEmotion) {
+  const selectedEmotions = state.specificEmotionsByCore.get(coreEmotionId);
+  if (!selectedEmotions) {
+    return;
+  }
+
+  if (selectedEmotions.has(specificEmotion)) {
+    selectedEmotions.delete(specificEmotion);
   } else {
-    state.specificEmotions.add(specificEmotion);
+    selectedEmotions.add(specificEmotion);
   }
   clearMessage();
   renderSpecificEmotions();
   renderSelectedMood();
-  setWheelCopy(selectedCoreEmotion());
+  setWheelCopy();
 }
 
 function renderSelectedMood() {
-  const coreEmotion = selectedCoreEmotion();
-  const selectedNames = [...state.specificEmotions];
-  const summary = !coreEmotion
+  const coreEmotions = selectedCoreEmotions();
+  const primaryCoreEmotion = coreEmotions[0];
+  const coreNames = coreEmotions.map((emotion) => emotion.name);
+  const selectedNames = selectedSpecificEmotions();
+  const summary = !primaryCoreEmotion
     ? 'Choose from the wheel'
     : selectedNames.length === 0
-      ? coreEmotion.name
-      : coreEmotion.name + ' · ' + selectedNames.join(', ');
+      ? coreNames.join(' + ')
+      : coreNames.join(' + ') + ' · ' + selectedNames.join(', ');
 
-  elements.selectedMood.dataset.selected = String(Boolean(coreEmotion));
-  elements.selectedMood.style.setProperty('--selected-color', coreEmotion?.color || '#d9d4cb');
+  elements.selectedMood.dataset.selected = String(Boolean(primaryCoreEmotion));
+  elements.selectedMood.style.setProperty('--selected-color', primaryCoreEmotion?.color || '#d9d4cb');
   elements.selectedMoodName.textContent = summary;
-  elements.selectionCount.textContent = !coreEmotion
+  elements.selectionCount.textContent = !primaryCoreEmotion
     ? '0 selected'
-    : selectedNames.length === 0
-      ? 'Core selected'
-      : selectedNames.length + ' shade' + (selectedNames.length === 1 ? '' : 's');
+    : coreNames.length + ' core ' + (coreNames.length === 1 ? 'feeling' : 'feelings')
+      + (selectedNames.length
+        ? ' · ' + selectedNames.length + ' shade' + (selectedNames.length === 1 ? '' : 's')
+        : '');
 }
 
 function renderEntries() {
@@ -290,7 +325,10 @@ function renderEntries() {
     const entries = state.entries.slice(0, 3).map((entry) => {
       const item = document.createElement('li');
       item.className = 'entry-item';
-      const coreEmotion = getCoreEmotion(entry.coreEmotion);
+      const coreEmotions = Array.isArray(entry.coreEmotions) && entry.coreEmotions.length
+        ? entry.coreEmotions
+        : [entry.coreEmotion].filter(Boolean);
+      const coreEmotion = getCoreEmotion(coreEmotions[0]);
       item.style.setProperty('--entry-color', coreEmotion?.color || '#9C9DA2');
 
       const top = document.createElement('div');
@@ -301,12 +339,12 @@ function renderEntries() {
       dot.className = 'entry-item-dot';
       dot.setAttribute('aria-hidden', 'true');
       const label = document.createElement('span');
-      label.textContent = entry.specificEmotions?.[0] || entry.coreEmotion || 'Check-in';
+      label.textContent = entry.specificEmotions?.[0] || coreEmotions.join(' + ') || 'Check-in';
       name.append(dot, label);
 
       const date = document.createElement('time');
       date.dateTime = entry.date || '';
-      date.textContent = formatDate(entry.date);
+      date.textContent = formatMoodDate(entry.date);
       top.append(name, date);
 
       const note = document.createElement('p');
@@ -367,7 +405,7 @@ async function loadEntries() {
 }
 
 function fieldForError(fields) {
-  if (fields.coreEmotion || fields.specificEmotions) {
+  if (fields.coreEmotion || fields.coreEmotions || fields.specificEmotions) {
     return document.querySelector('[data-core-emotion]');
   }
   if (fields.date) {
@@ -391,12 +429,44 @@ function fieldForError(fields) {
   return null;
 }
 
+function resetEntryForm() {
+  elements.entryForm.reset();
+  elements.entryDate.value = formatDateForInput(new Date());
+  elements.entryIntensity.value = '5';
+  elements.intensityValue.textContent = '5';
+  updateNoteCount();
+  state.coreEmotionIds = new Set();
+  state.specificEmotionsByCore = new Map();
+  renderWheel();
+  renderSpecificEmotions();
+  renderSelectedMood();
+}
+
+function showSavedEntry(result) {
+  if (!result?.entry || typeof result.entry !== 'object') {
+    resetEntryForm();
+    setMessage('Your check-in was saved. Refresh the page to see it in your recent entries.', 'success');
+    return;
+  }
+
+  try {
+    state.entries.unshift(result.entry);
+    renderEntries();
+    setDashboardUrl(result.dashboardUrl);
+  } catch (error) {
+    console.error('Saved entry could not be rendered.', error);
+  }
+
+  resetEntryForm();
+  setMessage('Saved to your Notion mood log. Thank you for noticing.', 'success');
+}
+
 async function saveEntry(event) {
   event.preventDefault();
   clearMessage();
   const payload = {
-    coreEmotion: state.coreEmotionId,
-    specificEmotions: [...state.specificEmotions],
+    coreEmotions: [...state.coreEmotionIds],
+    specificEmotions: selectedSpecificEmotions(),
     intensity: Number(elements.entryIntensity.value),
     date: elements.entryDate.value,
     notes: elements.entryNotes.value,
@@ -408,39 +478,31 @@ async function saveEntry(event) {
   elements.saveButton.disabled = true;
   elements.saveButton.setAttribute('aria-busy', 'true');
   try {
-    const response = await fetch('/api/entries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      showSignIn('Your session ended. Sign in with GitHub to save this check-in.');
-      return;
-    }
-    if (!response.ok) {
-      const fields = result.fields || {};
-      setMessage(Object.values(fields)[0] || result.error || 'Your check-in could not be saved.', 'error');
-      fieldForError(fields)?.focus();
+    let response;
+    try {
+      response = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setMessage(
+        'We could not confirm whether your check-in was saved. Check your Notion log before submitting it again.',
+        'error',
+      );
       return;
     }
 
-    state.entries.unshift(result.entry);
-    renderEntries();
-    setDashboardUrl(result.dashboardUrl);
-    elements.entryForm.reset();
-    elements.entryDate.value = formatDateForInput(new Date());
-    elements.entryIntensity.value = '5';
-    elements.intensityValue.textContent = '5';
-    updateNoteCount();
-    state.coreEmotionId = null;
-    state.specificEmotions = new Set();
-    renderWheel();
-    renderSpecificEmotions();
-    renderSelectedMood();
-    setMessage('Saved to your Notion mood log. Thank you for noticing.', 'success');
-  } catch {
-    setMessage('Your check-in could not be saved. Please try again.', 'error');
+    const result = await response.json().catch(() => null);
+    if (response.status === 401) {
+      showSignIn('Your session ended. Sign in with GitHub to save this check-in.');
+    } else if (!response.ok) {
+      const fields = result?.fields || {};
+      setMessage(Object.values(fields)[0] || result?.error || 'Your check-in could not be saved.', 'error');
+      fieldForError(fields)?.focus();
+    } else {
+      showSavedEntry(result);
+    }
   } finally {
     elements.saveButton.disabled = false;
     elements.saveButton.removeAttribute('aria-busy');

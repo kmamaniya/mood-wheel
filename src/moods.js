@@ -116,23 +116,33 @@ export function getSpecificEmotions(coreEmotionId) {
   return getCoreEmotion(coreEmotionId)?.specificEmotions ?? Object.freeze([]);
 }
 
+function selectedCoreEmotionIds(selection) {
+  if (Array.isArray(selection?.coreEmotions)) {
+    return normalizeEmotionList(selection.coreEmotions);
+  }
+  return normalizeEmotionList([selection?.coreEmotion]);
+}
+
 export function resolveMoodSelection(selection) {
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) {
     return null;
   }
 
-  const coreEmotion = getCoreEmotion(selection.coreEmotion);
-  if (!coreEmotion) {
+  const coreEmotionIds = selectedCoreEmotionIds(selection);
+  const coreEmotions = coreEmotionIds.map(getCoreEmotion);
+  if (coreEmotions.length === 0 || coreEmotions.some((emotion) => !emotion)) {
     return null;
   }
 
   const specificEmotions = normalizeEmotionList(selection.specificEmotions);
-  const allowedSpecificEmotions = new Set(coreEmotion.specificEmotions);
+  const allowedSpecificEmotions = new Set(
+    coreEmotions.flatMap((emotion) => emotion.specificEmotions),
+  );
   if (specificEmotions.some((emotion) => !allowedSpecificEmotions.has(emotion))) {
     return null;
   }
 
-  return { coreEmotion, specificEmotions };
+  return { coreEmotions, specificEmotions };
 }
 
 function validateTextField(value, key, label, errors) {
@@ -159,10 +169,11 @@ export function validateMoodEntry(entry) {
 
   const errors = {};
   const moodSelection = resolveMoodSelection(entry);
-  if (!getCoreEmotion(entry.coreEmotion)) {
+  if (selectedCoreEmotionIds(entry).length === 0
+    || selectedCoreEmotionIds(entry).some((id) => !getCoreEmotion(id))) {
     errors.coreEmotion = 'Choose a core feeling before saving.';
   } else if (!moodSelection) {
-    errors.specificEmotions = 'Choose specific emotions from the selected branch.';
+    errors.specificEmotions = 'Choose specific emotions from one of the selected branches.';
   }
 
   const intensity = Number(entry.intensity);
@@ -185,7 +196,10 @@ export function validateMoodEntry(entry) {
     errors,
     value: valid
       ? {
-          coreEmotion: moodSelection.coreEmotion.name,
+          // Keep a primary core feeling for existing clients and Notion views,
+          // while also preserving every selected core feeling.
+          coreEmotion: moodSelection.coreEmotions[0].name,
+          coreEmotions: moodSelection.coreEmotions.map((emotion) => emotion.name),
           specificEmotions: moodSelection.specificEmotions,
           intensity,
           date: entry.date,

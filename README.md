@@ -18,7 +18,8 @@ GitHub is used only to identify the approved owner (read:user scope). The GitHub
 
 The app matches the existing Daily Mood Log data source:
 
-- Core Emotion — Powerful, Safe, Joyful, Angry, Hurt, Scared, or Sad
+- Core Emotion — the first selected core feeling, retained for existing views
+- Core Emotions — multi-select of every selected core feeling
 - Specific Emotion(s) — multi-select
 - Intensity (1–10)
 - Date
@@ -29,9 +30,11 @@ The app matches the existing Daily Mood Log data source:
 
 The Notion page already contains the circular Emotion Wheel — Circular and Intensity Over Time visualizations. Signed-in users can open that dashboard from the app.
 
+On the first save after this version is deployed, the Worker adds the `Core Emotions` multi-select property if it is not already present. This preserves the existing `Core Emotion` select and lets new Notion views filter or group by all selected feelings.
+
 ## Configure deployment
 
-1. Connect this GitHub repository to a Cloudflare Worker named `mood-wheel`. Its deploy command is `npx wrangler deploy`.
+1. Connect this GitHub repository to a Cloudflare Worker named `mood-wheel`. Its deploy command is `npx wrangler deploy --keep-vars`.
 2. In GitHub, register an OAuth app. Set its callback URL to:
 
        https://YOUR-WORKER.workers.dev/api/auth/callback
@@ -50,7 +53,7 @@ The Notion page already contains the circular Emotion Wheel — Circular and Int
    | NOTION_DASHBOARD_URL | The private Mood Tracker Notion page URL |
    | SESSION_SECRET | A high-entropy random secret |
 
-5. Keep the linked Worker deploy command as `npx wrangler deploy`. The included `wrangler.toml` declares both the Worker entry point and the static assets directory.
+5. Keep the linked Worker deploy command as `npx wrangler deploy --keep-vars`. The included `wrangler.toml` declares both the Worker entry point and the static assets directory.
 
 The single-login allowlist is intentional: the current Notion database has no per-user ownership field, so allowing several GitHub accounts would make a shared journal.
 
