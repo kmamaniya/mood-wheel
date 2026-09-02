@@ -1,0 +1,9 @@
+# Copy this file to .dev.vars for local Cloudflare Pages development.
+# Never commit the filled-in .dev.vars file.
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+ALLOWED_GITHUB_LOGIN=
+NOTION_TOKEN=
+NOTION_DATA_SOURCE_ID=
+NOTION_DASHBOARD_URL=
+SESSION_SECRET=

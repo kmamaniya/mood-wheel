@@ -1,0 +1,515 @@
+import {
+  CORE_EMOTIONS,
+  getCoreEmotion,
+  getSpecificEmotions,
+} from './moods.js';
+
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const WHEEL_CENTER = 250;
+const OUTER_RADIUS = 214;
+const INNER_RADIUS = 145;
+
+const elements = {
+  authGate: document.querySelector('#auth-gate'),
+  authGateMessage: document.querySelector('#auth-gate-message'),
+  checkInApp: document.querySelector('#check-in-app'),
+  entryDate: document.querySelector('#entry-date'),
+  entryForm: document.querySelector('#entry-form'),
+  entryIntensity: document.querySelector('#entry-intensity'),
+  entryList: document.querySelector('#entry-list'),
+  entryNotes: document.querySelector('#entry-notes'),
+  entryTotal: document.querySelector('#entry-total'),
+  entryTrigger: document.querySelector('#entry-trigger'),
+  entryNeed: document.querySelector('#entry-need'),
+  entryHelped: document.querySelector('#entry-helped'),
+  formMessage: document.querySelector('#form-message'),
+  intensityValue: document.querySelector('#intensity-value'),
+  notionDashboardLink: document.querySelector('#notion-dashboard-link'),
+  noteCount: document.querySelector('#note-count'),
+  saveButton: document.querySelector('#save-button'),
+  selectionCount: document.querySelector('#selection-count'),
+  selectedMood: document.querySelector('#selected-mood'),
+  selectedMoodName: document.querySelector('#selected-mood-name'),
+  signInLink: document.querySelector('#sign-in-link'),
+  specificEmotions: document.querySelector('#specific-emotions'),
+  specificSection: document.querySelector('#specific-section'),
+  userAvatar: document.querySelector('#user-avatar'),
+  userLogin: document.querySelector('#user-login'),
+  userMenu: document.querySelector('#user-menu'),
+  wheelCore: document.querySelector('#wheel-core'),
+  wheelCopyHint: document.querySelector('#wheel-copy-hint'),
+  wheelCopyKicker: document.querySelector('#wheel-copy-kicker'),
+  wheelCopyTitle: document.querySelector('#wheel-copy-title'),
+  wheelSegments: document.querySelector('#wheel-segments'),
+};
+
+const state = {
+  coreEmotionId: null,
+  entries: [],
+  specificEmotions: new Set(),
+  user: null,
+};
+
+function createSvgElement(name, attributes) {
+  const element = document.createElementNS(SVG_NAMESPACE, name);
+  Object.entries(attributes || {}).forEach(([key, value]) => {
+    element.setAttribute(key, String(value));
+  });
+  return element;
+}
+
+function pointOnCircle(radius, angle) {
+  const radians = ((angle - 90) * Math.PI) / 180;
+  return {
+    x: WHEEL_CENTER + radius * Math.cos(radians),
+    y: WHEEL_CENTER + radius * Math.sin(radians),
+  };
+}
+
+function createDonutSlice(startAngle, endAngle) {
+  const outerStart = pointOnCircle(OUTER_RADIUS, startAngle);
+  const outerEnd = pointOnCircle(OUTER_RADIUS, endAngle);
+  const innerStart = pointOnCircle(INNER_RADIUS, startAngle);
+  const innerEnd = pointOnCircle(INNER_RADIUS, endAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+  return [
+    'M', outerStart.x, outerStart.y,
+    'A', OUTER_RADIUS, OUTER_RADIUS, 0, largeArc, 1, outerEnd.x, outerEnd.y,
+    'L', innerEnd.x, innerEnd.y,
+    'A', INNER_RADIUS, INNER_RADIUS, 0, largeArc, 0, innerStart.x, innerStart.y,
+    'Z',
+  ].join(' ');
+}
+
+function colorWithAlpha(hex, alpha) {
+  const number = Number.parseInt(hex.slice(1), 16);
+  const red = (number >> 16) & 255;
+  const green = (number >> 8) & 255;
+  const blue = number & 255;
+  return 'rgba(' + red + ', ' + green + ', ' + blue + ', ' + alpha + ')';
+}
+
+function selectedCoreEmotion() {
+  return getCoreEmotion(state.coreEmotionId);
+}
+
+function formatDateForInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function formatDate(dateValue) {
+  if (!dateValue) {
+    return '';
+  }
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    .format(new Date(dateValue + 'T12:00:00'));
+}
+
+function setMessage(message, stateName) {
+  elements.formMessage.textContent = message || '';
+  if (stateName) {
+    elements.formMessage.dataset.state = stateName;
+  } else {
+    delete elements.formMessage.dataset.state;
+  }
+}
+
+function clearMessage() {
+  setMessage('', '');
+}
+
+function setWheelCopy(coreEmotion) {
+  if (!coreEmotion) {
+    elements.wheelCore.style.fill = '#fffefa';
+    elements.wheelCore.style.stroke = 'rgba(58, 49, 38, 0.12)';
+    elements.wheelCopyKicker.textContent = 'CORE FEELING';
+    elements.wheelCopyTitle.textContent = 'Choose one';
+    elements.wheelCopyHint.textContent = 'from the wheel';
+    return;
+  }
+
+  elements.wheelCore.style.fill = colorWithAlpha(coreEmotion.color, 0.22);
+  elements.wheelCore.style.stroke = colorWithAlpha(coreEmotion.color, 0.65);
+  elements.wheelCopyKicker.textContent = 'CORE FEELING';
+  elements.wheelCopyTitle.textContent = coreEmotion.name;
+  elements.wheelCopyHint.textContent = state.specificEmotions.size
+    ? state.specificEmotions.size + ' shades chosen'
+    : 'choose all that fit';
+}
+
+function renderWheel() {
+  const selectedId = state.coreEmotionId;
+  const segmentSize = 360 / CORE_EMOTIONS.length;
+  const fragment = document.createDocumentFragment();
+
+  CORE_EMOTIONS.forEach((emotion, index) => {
+    const startAngle = index * segmentSize;
+    const endAngle = startAngle + segmentSize;
+    const labelPoint = pointOnCircle(177, startAngle + segmentSize / 2);
+    const selected = emotion.id === selectedId;
+    const group = createSvgElement('g', {
+      'aria-checked': selected ? 'true' : 'false',
+      'aria-label': emotion.name + '. ' + emotion.description,
+      class: 'wheel-segment',
+      'data-core-emotion': emotion.id,
+      'data-selected': selected ? 'true' : 'false',
+      role: 'radio',
+      tabindex: selected || (!selectedId && index === 0) ? '0' : '-1',
+    });
+    const title = createSvgElement('title');
+    title.textContent = emotion.name + ': ' + emotion.description;
+    const path = createSvgElement('path', {
+      class: 'wheel-segment-path',
+      d: createDonutSlice(startAngle, endAngle),
+      fill: colorWithAlpha(emotion.color, selected ? 0.88 : 0.7),
+    });
+    const label = createSvgElement('text', {
+      class: 'wheel-segment-label',
+      x: labelPoint.x,
+      y: labelPoint.y,
+      'text-anchor': 'middle',
+    });
+    label.textContent = emotion.name;
+
+    group.append(title, path, label);
+    group.addEventListener('click', () => selectCoreEmotion(emotion.id));
+    group.addEventListener('keydown', (event) => handleWheelKeydown(event, index));
+    fragment.append(group);
+  });
+
+  elements.wheelSegments.replaceChildren(fragment);
+  setWheelCopy(selectedCoreEmotion());
+}
+
+function handleWheelKeydown(event, index) {
+  let targetIndex;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    targetIndex = (index + 1) % CORE_EMOTIONS.length;
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    targetIndex = (index - 1 + CORE_EMOTIONS.length) % CORE_EMOTIONS.length;
+  } else if (event.key === 'Home') {
+    targetIndex = 0;
+  } else if (event.key === 'End') {
+    targetIndex = CORE_EMOTIONS.length - 1;
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    selectCoreEmotion(CORE_EMOTIONS[index].id, true);
+    return;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  selectCoreEmotion(CORE_EMOTIONS[targetIndex].id, true);
+}
+
+function selectCoreEmotion(id, moveFocus) {
+  if (!getCoreEmotion(id)) {
+    return;
+  }
+
+  state.coreEmotionId = id;
+  state.specificEmotions = new Set();
+  clearMessage();
+  renderWheel();
+  renderSpecificEmotions();
+  renderSelectedMood();
+
+  if (moveFocus) {
+    document.querySelector('[data-core-emotion="' + id + '"]')?.focus();
+  }
+}
+
+function renderSpecificEmotions() {
+  const coreEmotion = selectedCoreEmotion();
+  elements.specificSection.hidden = !coreEmotion;
+  elements.specificEmotions.replaceChildren();
+  if (!coreEmotion) {
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  getSpecificEmotions(coreEmotion.id).forEach((specificEmotion) => {
+    const selected = state.specificEmotions.has(specificEmotion);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'specific-chip';
+    button.dataset.selected = selected ? 'true' : 'false';
+    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    button.style.setProperty('--mood-color', coreEmotion.color);
+    button.textContent = specificEmotion;
+    button.addEventListener('click', () => toggleSpecificEmotion(specificEmotion));
+    fragment.append(button);
+  });
+  elements.specificEmotions.append(fragment);
+}
+
+function toggleSpecificEmotion(specificEmotion) {
+  if (state.specificEmotions.has(specificEmotion)) {
+    state.specificEmotions.delete(specificEmotion);
+  } else {
+    state.specificEmotions.add(specificEmotion);
+  }
+  clearMessage();
+  renderSpecificEmotions();
+  renderSelectedMood();
+  setWheelCopy(selectedCoreEmotion());
+}
+
+function renderSelectedMood() {
+  const coreEmotion = selectedCoreEmotion();
+  const selectedNames = [...state.specificEmotions];
+  const summary = !coreEmotion
+    ? 'Choose from the wheel'
+    : selectedNames.length === 0
+      ? coreEmotion.name
+      : coreEmotion.name + ' · ' + selectedNames.join(', ');
+
+  elements.selectedMood.dataset.selected = String(Boolean(coreEmotion));
+  elements.selectedMood.style.setProperty('--selected-color', coreEmotion?.color || '#d9d4cb');
+  elements.selectedMoodName.textContent = summary;
+  elements.selectionCount.textContent = !coreEmotion
+    ? '0 selected'
+    : selectedNames.length === 0
+      ? 'Core selected'
+      : selectedNames.length + ' shade' + (selectedNames.length === 1 ? '' : 's');
+}
+
+function renderEntries() {
+  elements.entryList.replaceChildren();
+  if (state.entries.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'empty-entries';
+    empty.textContent = 'Your check-ins will appear in Notion and gather here as a gentle record.';
+    elements.entryList.append(empty);
+  } else {
+    const entries = state.entries.slice(0, 3).map((entry) => {
+      const item = document.createElement('li');
+      item.className = 'entry-item';
+      const coreEmotion = getCoreEmotion(entry.coreEmotion);
+      item.style.setProperty('--entry-color', coreEmotion?.color || '#9C9DA2');
+
+      const top = document.createElement('div');
+      top.className = 'entry-item-top';
+      const name = document.createElement('span');
+      name.className = 'entry-item-name';
+      const dot = document.createElement('span');
+      dot.className = 'entry-item-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.textContent = entry.specificEmotions?.[0] || entry.coreEmotion || 'Check-in';
+      name.append(dot, label);
+
+      const date = document.createElement('time');
+      date.dateTime = entry.date || '';
+      date.textContent = formatDate(entry.date);
+      top.append(name, date);
+
+      const note = document.createElement('p');
+      note.textContent = entry.notes || entry.trigger || '';
+      item.append(top, note);
+      return item;
+    });
+    elements.entryList.append(...entries);
+  }
+
+  const total = state.entries.length;
+  elements.entryTotal.textContent = total === 0
+    ? 'No check-ins yet'
+    : total === 1
+      ? '1 saved check-in'
+      : total + ' saved check-ins';
+}
+
+function updateNoteCount() {
+  elements.noteCount.textContent = elements.entryNotes.value.length + ' / 2000';
+}
+
+function setDashboardUrl(url) {
+  if (!url) {
+    elements.notionDashboardLink.hidden = true;
+    return;
+  }
+  elements.notionDashboardLink.href = url;
+  elements.notionDashboardLink.hidden = false;
+}
+
+async function loadEntries() {
+  elements.entryList.setAttribute('aria-busy', 'true');
+  try {
+    const response = await fetch('/api/entries', { headers: { Accept: 'application/json' } });
+    if (response.status === 401) {
+      showSignIn('Your session ended. Sign in with GitHub to continue.');
+      return;
+    }
+    if (!response.ok) {
+      throw new Error('Entries request failed.');
+    }
+
+    const result = await response.json();
+    state.entries = Array.isArray(result.entries) ? result.entries : [];
+    setDashboardUrl(result.dashboardUrl);
+    renderEntries();
+  } catch {
+    elements.entryList.replaceChildren();
+    const message = document.createElement('li');
+    message.className = 'empty-entries';
+    message.textContent = 'We could not reach your Notion mood log just now. Your entries are still safe there.';
+    elements.entryList.append(message);
+    elements.entryTotal.textContent = 'Notion is unavailable';
+  } finally {
+    elements.entryList.removeAttribute('aria-busy');
+  }
+}
+
+function fieldForError(fields) {
+  if (fields.coreEmotion || fields.specificEmotions) {
+    return document.querySelector('[data-core-emotion]');
+  }
+  if (fields.date) {
+    return elements.entryDate;
+  }
+  if (fields.intensity) {
+    return elements.entryIntensity;
+  }
+  if (fields.notes) {
+    return elements.entryNotes;
+  }
+  if (fields.trigger) {
+    return elements.entryTrigger;
+  }
+  if (fields.need) {
+    return elements.entryNeed;
+  }
+  if (fields.helped) {
+    return elements.entryHelped;
+  }
+  return null;
+}
+
+async function saveEntry(event) {
+  event.preventDefault();
+  clearMessage();
+  const payload = {
+    coreEmotion: state.coreEmotionId,
+    specificEmotions: [...state.specificEmotions],
+    intensity: Number(elements.entryIntensity.value),
+    date: elements.entryDate.value,
+    notes: elements.entryNotes.value,
+    trigger: elements.entryTrigger.value,
+    need: elements.entryNeed.value,
+    helped: elements.entryHelped.value,
+  };
+
+  elements.saveButton.disabled = true;
+  elements.saveButton.setAttribute('aria-busy', 'true');
+  try {
+    const response = await fetch('/api/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      showSignIn('Your session ended. Sign in with GitHub to save this check-in.');
+      return;
+    }
+    if (!response.ok) {
+      const fields = result.fields || {};
+      setMessage(Object.values(fields)[0] || result.error || 'Your check-in could not be saved.', 'error');
+      fieldForError(fields)?.focus();
+      return;
+    }
+
+    state.entries.unshift(result.entry);
+    renderEntries();
+    setDashboardUrl(result.dashboardUrl);
+    elements.entryForm.reset();
+    elements.entryDate.value = formatDateForInput(new Date());
+    elements.entryIntensity.value = '5';
+    elements.intensityValue.textContent = '5';
+    updateNoteCount();
+    state.coreEmotionId = null;
+    state.specificEmotions = new Set();
+    renderWheel();
+    renderSpecificEmotions();
+    renderSelectedMood();
+    setMessage('Saved to your Notion mood log. Thank you for noticing.', 'success');
+  } catch {
+    setMessage('Your check-in could not be saved. Please try again.', 'error');
+  } finally {
+    elements.saveButton.disabled = false;
+    elements.saveButton.removeAttribute('aria-busy');
+  }
+}
+
+function authMessageFromUrl() {
+  const authState = new URLSearchParams(window.location.search).get('auth');
+  if (authState === 'not-approved') {
+    return 'That GitHub account is not approved for this private journal.';
+  }
+  if (authState === 'invalid') {
+    return 'That sign-in link expired. Please try GitHub sign-in again.';
+  }
+  return 'Your GitHub identity protects this journal before anything is read from or written to Notion.';
+}
+
+function showSignIn(message) {
+  elements.authGate.hidden = false;
+  elements.checkInApp.hidden = true;
+  elements.userMenu.hidden = true;
+  elements.signInLink.hidden = false;
+  elements.authGateMessage.textContent = message;
+}
+
+function showCheckIn(user) {
+  state.user = user;
+  elements.authGate.hidden = true;
+  elements.checkInApp.hidden = false;
+  elements.userMenu.hidden = false;
+  elements.signInLink.hidden = true;
+  elements.userLogin.textContent = '@' + user.login;
+  elements.userAvatar.src = user.avatarUrl || '';
+  elements.userAvatar.alt = user.login + ' avatar';
+}
+
+async function establishSession() {
+  try {
+    const response = await fetch('/api/me', { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      showSignIn(authMessageFromUrl());
+      return;
+    }
+
+    const result = await response.json();
+    if (!result.user?.login) {
+      showSignIn(authMessageFromUrl());
+      return;
+    }
+    showCheckIn(result.user);
+    await loadEntries();
+  } catch {
+    showSignIn('This local preview needs its secure deployment settings before GitHub sign-in can run.');
+  }
+}
+
+function initialize() {
+  elements.entryDate.value = formatDateForInput(new Date());
+  elements.entryForm.addEventListener('submit', saveEntry);
+  elements.entryNotes.addEventListener('input', updateNoteCount);
+  elements.entryIntensity.addEventListener('input', () => {
+    elements.intensityValue.textContent = elements.entryIntensity.value;
+  });
+  renderWheel();
+  renderSpecificEmotions();
+  renderSelectedMood();
+  renderEntries();
+  updateNoteCount();
+  establishSession();
+}
+
+initialize();

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A private, GitHub-authenticated feelings-wheel check-in saved to your Notion mood log."
+    />
+    <meta name="theme-color" content="#f6f3ed" />
+    <title>mood / a private check-in</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="site-header">
+        <a class="wordmark" href="./" aria-label="Mood home">
+          <span class="wordmark-mark" aria-hidden="true"></span>
+          <span>mood</span>
+        </a>
+        <div class="auth-controls" id="auth-controls">
+          <a class="sign-in-button" href="/api/auth/login" id="sign-in-link">
+            Continue with GitHub
+          </a>
+          <div class="user-menu" id="user-menu" hidden>
+            <img class="user-avatar" id="user-avatar" alt="" />
+            <span id="user-login"></span>
+            <form action="/api/auth/logout" method="post">
+              <button class="text-button" type="submit">Sign out</button>
+            </form>
+          </div>
+        </div>
+      </header>
+
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">A moment for yourself</p>
+        <h1 id="page-title">What is here today?</h1>
+        <p>Notice the feeling. Name its texture. Let your Notion log hold the rest.</p>
+      </section>
+
+      <section class="auth-gate surface" id="auth-gate" hidden aria-labelledby="sign-in-heading">
+        <div class="auth-gate-mark" aria-hidden="true">↗</div>
+        <p class="eyebrow">Your private space</p>
+        <h2 id="sign-in-heading">Sign in to begin a check-in.</h2>
+        <p id="auth-gate-message">
+          Your GitHub identity protects this journal before anything is read from or written to Notion.
+        </p>
+        <a class="save-button auth-gate-button" href="/api/auth/login">
+          <span>Continue with GitHub</span>
+          <span aria-hidden="true">→</span>
+        </a>
+      </section>
+
+      <section id="check-in-app" hidden aria-label="Mood check-in">
+        <section class="entry-layout">
+          <section class="wheel-card surface" aria-labelledby="wheel-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Step 1</p>
+                <h2 id="wheel-heading">Find your core feeling</h2>
+              </div>
+              <span class="step-count" id="selection-count">0 selected</span>
+            </div>
+
+            <div class="wheel-stage">
+              <svg
+                class="mood-wheel"
+                viewBox="0 0 500 500"
+                role="radiogroup"
+                aria-label="Choose a core emotion"
+                aria-describedby="wheel-instruction"
+              >
+                <circle class="wheel-halo" cx="250" cy="250" r="232"></circle>
+                <g id="wheel-segments"></g>
+                <circle class="wheel-core" id="wheel-core" cx="250" cy="250" r="74"></circle>
+                <g class="wheel-copy" aria-hidden="true">
+                  <text class="wheel-copy-kicker" id="wheel-copy-kicker" x="250" y="234">CORE FEELING</text>
+                  <text class="wheel-copy-title" id="wheel-copy-title" x="250" y="265">Choose one</text>
+                  <text class="wheel-copy-hint" id="wheel-copy-hint" x="250" y="288">from the wheel</text>
+                </g>
+              </svg>
+            </div>
+
+            <p class="wheel-instruction" id="wheel-instruction">
+              Choose the broad feeling first. Use arrow keys to move around the wheel.
+            </p>
+
+            <div class="specific-section" id="specific-section" hidden>
+              <div class="field-label-row">
+                <label id="specific-heading">Choose all that fit</label>
+                <span>Multiple choices welcome</span>
+              </div>
+              <div
+                class="specific-emotions"
+                id="specific-emotions"
+                role="group"
+                aria-labelledby="specific-heading"
+              ></div>
+            </div>
+          </section>
+
+          <section class="entry-card surface" aria-labelledby="entry-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Step 2</p>
+                <h2 id="entry-heading">Tell the story gently</h2>
+              </div>
+              <a class="dashboard-link" id="notion-dashboard-link" href="#" target="_blank" rel="noreferrer" hidden>
+                View in Notion <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+
+            <form id="entry-form" novalidate>
+              <div class="selected-mood" id="selected-mood" data-selected="false">
+                <span class="selected-mood-swatch" aria-hidden="true"></span>
+                <div>
+                  <span class="selected-mood-label">This check-in</span>
+                  <strong id="selected-mood-name">Choose from the wheel</strong>
+                </div>
+              </div>
+
+              <div class="two-up">
+                <div class="form-field">
+                  <label for="entry-date">When</label>
+                  <input id="entry-date" name="date" type="date" required />
+                </div>
+                <fieldset class="energy-field">
+                  <legend>Intensity <span id="intensity-value">5</span> / 10</legend>
+                  <input
+                    id="entry-intensity"
+                    name="intensity"
+                    type="range"
+                    min="1"
+                    max="10"
+                    value="5"
+                    aria-label="Intensity from 1 to 10"
+                  />
+                </fieldset>
+              </div>
+
+              <div class="form-field">
+                <div class="field-label-row">
+                  <label for="entry-notes">What am I feeling?</label>
+                  <span id="note-count" aria-live="polite">0 / 2000</span>
+                </div>
+                <textarea
+                  id="entry-notes"
+                  name="notes"
+                  rows="3"
+                  maxlength="2000"
+                  placeholder="A few words are enough."
+                ></textarea>
+              </div>
+
+              <div class="form-field">
+                <label for="entry-trigger">What happened before I felt this way?</label>
+                <textarea
+                  id="entry-trigger"
+                  name="trigger"
+                  rows="2"
+                  maxlength="2000"
+                  placeholder="A moment, thought, or situation."
+                ></textarea>
+              </div>
+
+              <div class="reflection-grid">
+                <div class="form-field">
+                  <label for="entry-need">What do I need right now?</label>
+                  <textarea
+                    id="entry-need"
+                    name="need"
+                    rows="2"
+                    maxlength="2000"
+                    placeholder="Care, rest, clarity…"
+                  ></textarea>
+                </div>
+                <div class="form-field">
+                  <label for="entry-helped">What would help?</label>
+                  <textarea
+                    id="entry-helped"
+                    name="helped"
+                    rows="2"
+                    maxlength="2000"
+                    placeholder="One next gentle thing."
+                  ></textarea>
+                </div>
+              </div>
+
+              <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
+
+              <button class="save-button" id="save-button" type="submit">
+                <span>Save to your Notion log</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </form>
+
+            <p class="storage-note">
+              <span aria-hidden="true">⌁</span>
+              Your entries stay in your private Notion workspace
+            </p>
+          </section>
+        </section>
+
+        <section class="recent-section" aria-labelledby="recent-heading">
+          <div class="recent-heading">
+            <div>
+              <p class="eyebrow">Your rhythm</p>
+              <h2 id="recent-heading">Recent check-ins</h2>
+            </div>
+            <p id="entry-total" aria-live="polite">Loading your mood log…</p>
+          </div>
+          <ol class="entry-list" id="entry-list"></ol>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
