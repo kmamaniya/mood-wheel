@@ -2,6 +2,9 @@ name = "mood-wheel"
 main = "src/worker.js"
 compatibility_date = "2026-09-01"
 workers_dev = true
+# Runtime variables are managed in Cloudflare's dashboard. Keep them on each
+# Git-triggered deployment rather than replacing them from this public config.
+keep_vars = true
 
 [assets]
 directory = "./public"
